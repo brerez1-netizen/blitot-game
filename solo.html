@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>תפסו את הבליטה</title>
+<style>
+  :root{
+    --bg:#24201a; --panel:#302921; --panel-2:#3c3227; --ink:#f3ece0; --dim:#c0b09a;
+    --line:#544636; --accent:#e0a35f;
+    --ok:#7ec48c; --ok-bg:#22361f; --bad:#e39184; --bad-bg:#3b211c;
+    --mark:#e8543a; --measure:#f0e2c8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 "Segoe UI",system-ui,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 15px 60px}
+  h1{font-size:1.5rem;font-weight:900;margin:0 0 3px}
+  .sub{color:var(--dim);font-size:.9rem;margin:0 0 16px}
+
+  .steps{display:flex;gap:5px;margin-bottom:15px;flex-wrap:wrap}
+  .step{width:29px;height:29px;border-radius:6px;display:grid;place-items:center;
+    background:var(--panel-2);border:1px solid var(--line);font-size:.8rem;font-weight:700;color:var(--dim)}
+  .step.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+  .step.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+  .step.now{border-color:var(--accent);color:var(--accent)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:17px 19px;margin-bottom:13px}
+  .case-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+  .case-num{font-size:.77rem;color:var(--dim);font-weight:700}
+  h2{font-size:1.15rem;font-weight:900;margin:0}
+  .brief{font-size:1rem;margin:0}
+
+  /* התמונה ושכבת הסימון */
+  .plate{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#0d0b09}
+  .plate img{width:100%;display:block}
+  .plate svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .tagwrap{position:absolute;inset:0;pointer-events:none}
+  .tag{position:absolute;transform:translate(50%,-50%);white-space:nowrap;
+    font-size:clamp(11px,1.35vw,15px);font-weight:900;padding:2px 9px;border-radius:5px;
+    background:#241f19;border:2px solid;line-height:1.4}
+  .tag.ok{color:var(--ok);border-color:var(--ok)}
+  .tag.bad{color:var(--bad);border-color:var(--bad)}
+  .tag.muted{color:var(--measure);border-color:#8d7c66;font-weight:700}
+  .tag.plain{color:var(--dim);border-color:#6b5a45;font-weight:700;font-size:clamp(10px,1.1vw,13px)}
+
+  .options{display:grid;gap:9px;margin-top:4px}
+  .opt{text-align:right;width:100%;cursor:pointer;font:inherit;color:var(--ink);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:12px 15px}
+  .opt:hover:not(:disabled){border-color:var(--accent)}
+  .opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .opt:disabled{cursor:default;opacity:.5}
+  .opt.picked-ok{background:var(--ok-bg);border-color:var(--ok);opacity:1}
+  .opt.picked-bad{background:var(--bad-bg);border-color:var(--bad);opacity:1}
+  .opt.right{border-color:var(--ok);opacity:1}
+
+  .fb{margin-top:15px;padding-top:13px;border-top:1px solid var(--line)}
+  .fb-line{font-weight:900;margin-bottom:7px}
+  .fb-line.ok{color:var(--ok)} .fb-line.bad{color:var(--bad)}
+  .why{white-space:pre-wrap;font-size:.95rem}
+  .why b{color:var(--accent)}
+  .actions{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
+  button.action{cursor:pointer;font:inherit;font-weight:700;background:var(--accent);
+    color:#24201a;border:none;border-radius:8px;padding:10px 20px}
+  button.action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .score{font-size:2.3rem;font-weight:900;color:var(--accent)}
+  .row{display:flex;gap:9px;align-items:baseline;padding:7px 0;border-bottom:1px dashed var(--line);font-size:.92rem}
+  .row:last-child{border-bottom:none}
+  .row .m{font-weight:900}
+  .row .m.ok{color:var(--ok)} .row .m.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>תפסו את הבליטה</h1>
+  <p class="sub">עשרה מקרים מתוך טבלת הבליטות. המידה מסומנת על השרטוט, וקו הבניין מקווקו באדום.</p>
+  <div class="steps" id="steps"></div>
+  <div id="stage"></div>
+</div>
+
+<script src="js/gameData.js"></script>
+<script>
+const gd = window.gameData;
+const KEY = 'blitot_v1';
+let answers = [];
+let current = 0;
+
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({answers,current})); }catch(e){} }
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(KEY)||'{}');
+    if(Array.isArray(s.answers)) answers = s.answers;
+    if(typeof s.current === 'number') current = s.current;
+  }catch(e){}
+}
+
+/* ---------- שכבת הסימון ----------
+   כל הקואורדינטות באחוזים, וה-SVG נמתח על התמונה, כך שהסימון נשאר במקומו
+   בכל רוחב מסך. התוויות הן אלמנטים רגילים ולא טקסט ב-SVG, כדי שהעברית
+   תיפול נכון ותהיה קריאה בקורא מסך. */
+function overlay(o){
+  if(!o) return '';
+  const S = [], T = [];
+
+  if(o.buildingLine){
+    const b = o.buildingLine;
+    S.push(`<line x1="${b.x}" y1="${b.y1}" x2="${b.x}" y2="${b.y2}" stroke="var(--mark)" stroke-width="0.4" stroke-dasharray="1.8 1.2" vector-effect="non-scaling-stroke"/>`);
+    T.push(`<span class="tag plain" style="right:${100-b.x}%;top:${b.y1}%">קו בניין</span>`);
+  }
+
+  if(o.boundary){
+    const w = o.boundary;
+    S.push(`<rect x="${w.x-0.55}" y="${w.groundY-w.h}" width="1.1" height="${w.h}" fill="#b7a58c"/>`);
+    T.push(`<span class="tag plain" style="right:${100-w.x}%;top:${w.groundY-w.h-4}%">גבול המגרש</span>`);
+  }
+
+  (o.dims||[]).forEach(d=>{
+    const col = d.tone==='ok' ? 'var(--ok)' : d.tone==='muted' ? '#a8947a' : 'var(--bad)';
+    const w = d.tone==='muted' ? 0.3 : 0.45;
+    if(d.o==='h'){
+      S.push(`<line x1="${d.a}" y1="${d.at}" x2="${d.b}" y2="${d.at}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      S.push(`<line x1="${d.a}" y1="${d.at-2.2}" x2="${d.a}" y2="${d.at+2.2}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      S.push(`<line x1="${d.b}" y1="${d.at-2.2}" x2="${d.b}" y2="${d.at+2.2}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      T.push(`<span class="tag ${d.tone}" style="right:${100-(d.a+d.b)/2}%;top:${d.at+5.5}%">${d.label}</span>`);
+    } else {
+      S.push(`<line x1="${d.at}" y1="${d.a}" x2="${d.at}" y2="${d.b}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      S.push(`<line x1="${d.at-1.6}" y1="${d.a}" x2="${d.at+1.6}" y2="${d.a}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      S.push(`<line x1="${d.at-1.6}" y1="${d.b}" x2="${d.at+1.6}" y2="${d.b}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`);
+      T.push(`<span class="tag ${d.tone}" style="right:${100-(d.at+9)}%;top:${(d.a+d.b)/2}%">${d.label}</span>`);
+    }
+  });
+
+  (o.marks||[]).forEach(m=>{
+    S.push(`<circle cx="${m.x}" cy="${m.y}" r="2.2" fill="none" stroke="var(--mark)" stroke-width="0.45" vector-effect="non-scaling-stroke"/>`);
+    T.push(`<span class="tag plain" style="right:${100-m.x}%;top:${m.y+7}%">${m.label}</span>`);
+  });
+
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${S.join('')}</svg><div class="tagwrap">${T.join('')}</div>`;
+}
+
+function renderSteps(){
+  document.getElementById('steps').innerHTML = gd.CASES.map((c,i)=>{
+    let cls='step';
+    if(answers[i]) cls += answers[i].correct ? ' ok' : ' bad';
+    if(i===current) cls += ' now';
+    return `<div class="${cls}" title="${c.title}">${i+1}</div>`;
+  }).join('');
+}
+
+function render(){
+  renderSteps();
+  const stage = document.getElementById('stage');
+  if(current >= gd.CASES.length){ stage.innerHTML = summary(); return; }
+
+  const c = gd.CASES[current];
+  const a = answers[current];
+
+  const opts = c.options.map((t,i)=>{
+    let cls='opt', dis='';
+    if(a){
+      dis='disabled';
+      if(i===a.picked) cls += a.correct ? ' picked-ok' : ' picked-bad';
+      else if(i===c.correct) cls += ' right';
+    }
+    return `<button class="${cls}" ${dis} data-i="${i}">${t}</button>`;
+  }).join('');
+
+  const fb = a ? `<div class="fb">
+      <div class="fb-line ${a.correct?'ok':'bad'}">${a.correct?'✔ נכון':'✘ התשובה: ' + c.options[c.correct]}</div>
+      <div class="why">${c.why.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</div>
+      <div class="actions"><button class="action" id="next">${current===gd.CASES.length-1?'לסיכום':'למקרה הבא'}</button></div>
+    </div>` : '';
+
+  stage.innerHTML = `
+    <div class="card">
+      <div class="case-head"><span class="case-num">מקרה ${current+1} מתוך ${gd.CASES.length}</span><h2>${c.title}</h2></div>
+      <p class="brief">${c.brief}</p>
+    </div>
+    <div class="card" style="padding:12px">
+      <div class="plate"><img src="${c.image}" alt="${c.alt}">${overlay(c.overlay)}</div>
+    </div>
+    <div class="card">
+      <p style="font-weight:900;margin:0 0 11px">${c.question}</p>
+      <div class="options">${opts}</div>${fb}
+    </div>`;
+
+  stage.querySelectorAll('.opt:not([disabled])').forEach(b=>{
+    b.addEventListener('click',()=>answer(+b.dataset.i));
+  });
+  const nx = document.getElementById('next');
+  if(nx) nx.addEventListener('click',()=>{ current++; save(); render(); window.scrollTo({top:0,behavior:'smooth'}); });
+}
+
+function answer(i){
+  const c = gd.CASES[current];
+  answers[current] = { picked:i, correct: i===c.correct };
+  save(); render();
+}
+
+function summary(){
+  const right = answers.filter(a=>a&&a.correct).length;
+  const rows = gd.CASES.map((c,i)=>{
+    const a = answers[i];
+    return `<div class="row"><span class="m ${a&&a.correct?'ok':'bad'}">${a&&a.correct?'✔':'✘'}</span>
+      <span style="flex:1">${c.title}</span><span style="color:var(--dim)">${c.verdict}</span></div>`;
+  }).join('');
+  return `<div class="card">
+    <p style="font-weight:900;margin:0 0 8px;color:var(--accent)">סיכום</p>
+    <div class="score">${right} מתוך ${gd.CASES.length}</div>
+    <div style="margin-top:13px">${rows}</div>
+    <div class="actions"><button class="action" id="again">מהתחלה</button></div>
+  </div>`;
+}
+
+document.addEventListener('click',e=>{
+  if(e.target && e.target.id==='again'){ answers=[]; current=0; save(); render(); window.scrollTo({top:0}); }
+});
+
+load();
+render();
+</script>
+</body>
+</html>
